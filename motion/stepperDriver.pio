@@ -1,0 +1,58 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+
+.program stepperdriver
+
+main:
+	pull block	;
+	mov x, osr 	;
+    set y, 0  ;
+    mov osr, y
+    mov isr, y
+
+
+driving_loop:
+	set pins, 0b00011   	
+	mov isr, x			    
+	set pins, 0b00000
+	jmp x--, driving_loop
+    jmp main
+
+
+% c-sdk {
+    
+bool first_time = true;
+
+static inline pio_sm_config stepperdriver_program_init(PIO pio, uint stateMachine, uint offset, uint base_pin, float clk_div) {
+
+    //get the default config
+    pio_sm_config stateMachineConfig = stepperdriver_program_get_default_config(offset);
+
+    //define the step pins in config as well
+	sm_config_set_out_pins(&stateMachineConfig, base_pin, 2);
+
+    //no one has a stepper driver that can be driven above 100MHz, so we need to decraase the running frequency
+    sm_config_set_clkdiv(&stateMachineConfig, clk_div);
+    
+    //out shift register configs, shift to rigth true, autopull true, number of bits to shift 32
+    sm_config_set_out_shift(&stateMachineConfig, true, false, 32);
+    sm_config_set_in_shift(&stateMachineConfig, true, false, 32);
+
+    //initialize the spescific pio and the initial base pin to drive
+    pio_gpio_init(pio, base_pin); //GP20
+    pio_gpio_init(pio, (base_pin + 1) ); //GP21
+
+
+	//two different stepper drivers "step" pins needed to be driven together.
+	//base pin is GP20 for stepperdriver1 and the GP21 is for stepperdriver2, thus 2 pins as parameter
+    pio_sm_set_consecutive_pindirs(pio, stateMachine, base_pin, 2, true);
+    pio_sm_set_set_pins(pio, stateMachine, base_pin, 2);
+    sm_config_set_set_pins(&stateMachineConfig, base_pin, 2);
+
+    //pio_sm_init(pio, stateMachine, offset, &stateMachineConfig);
+    return stateMachineConfig;
+}
+%}
